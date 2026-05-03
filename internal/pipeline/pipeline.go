@@ -5,6 +5,8 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sort"
+
 	"tiagorocha94/household-finance-pipeline/internal/aggregation"
 	"tiagorocha94/household-finance-pipeline/internal/config"
 	"tiagorocha94/household-finance-pipeline/internal/domain"
@@ -21,15 +23,13 @@ type Pipeline struct {
 	cfg config.Config
 	log *slog.Logger
 
-	ingestor ingestion.Ingestor
-	parser   parsing.Parser
-
+	ingestor   ingestion.Ingestor
+	parser     parsing.Parser
 	aggregator aggregation.Aggregator
 	exporters  []presentation.Exporter
 }
 
 // New creates a fully configured pipeline.
-// All dependencies are explicit (no registry, no init magic).
 func New(
 	cfg config.Config,
 	ingestor ingestion.Ingestor,
@@ -38,11 +38,9 @@ func New(
 	exporters []presentation.Exporter,
 	logger *slog.Logger,
 ) (*Pipeline, error) {
-
 	if logger == nil {
 		logger = slog.New(slog.NewTextHandler(os.Stdout, nil))
 	}
-
 	if ingestor == nil {
 		return nil, fmt.Errorf("ingestor is required")
 	}
@@ -66,7 +64,6 @@ func New(
 	}
 
 	p.log.Info("pipeline initialized")
-
 	return p, nil
 }
 
@@ -78,48 +75,41 @@ func (p *Pipeline) Run(month string) error {
 	if err != nil {
 		return err
 	}
-
 	p.log.Info("files ingested", "count", len(rawFiles))
 
 	var parsed []domain.PersonData
-
 	for _, file := range rawFiles {
 		p.log.Debug("parsing file", "file", file.Name)
-
 		data, err := p.parser.Parse(file)
 		if err != nil {
 			return fmt.Errorf("parse %s: %w", file.Name, err)
 		}
 		parsed = append(parsed, data)
 	}
-
 	p.log.Info("parsing completed", "persons", len(parsed))
 
 	household, peopleData, err := p.aggregator.Aggregate(parsed)
 	if err != nil {
 		return err
 	}
-
 	p.log.Info("aggregation completed")
 
 	report := buildReport(household, peopleData)
 
 	for _, exporter := range p.exporters {
 		name := fmt.Sprintf("%T", exporter)
-
 		p.log.Info("exporting report", "exporter", name)
 
 		outputs, err := exporter.Export(report)
 		if err != nil {
 			return err
 		}
-
 		if err := p.writeOutputs(month, outputs); err != nil {
 			return err
 		}
 	}
 
-	if err := manifest.Update("output"); err != nil {
+	if err := manifest.Update(p.cfg.OutputDir); err != nil {
 		return fmt.Errorf("update manifest: %w", err)
 	}
 
@@ -127,42 +117,34 @@ func (p *Pipeline) Run(month string) error {
 	return nil
 }
 
-// buildReport converts aggregated data into reporting model.
-// It accepts the full []PersonData so it can look up per-person CategoryGroups by name.
+// buildReport converts aggregated household data and per-person data into the
+// presentation model. All output slices are sorted for deterministic ordering.
 func buildReport(h domain.HouseholdData, persons []domain.PersonData) presentation.Report {
 	householdExpense := map[string]float64{}
 	householdIncome := map[string]float64{}
-
 	personExpense := map[string]map[string]float64{}
 	personIncome := map[string]map[string]float64{}
 
 	var totalIncome, totalExpense float64
 
-	// EXPENSES
 	for _, e := range h.Expenses {
 		totalExpense += e.Amount.Value
-
 		householdExpense[e.Category] += e.Amount.Value
-
 		if personExpense[e.PersonName] == nil {
 			personExpense[e.PersonName] = map[string]float64{}
 		}
 		personExpense[e.PersonName][e.Category] += e.Amount.Value
 	}
 
-	// INCOMES
 	for _, i := range h.Incomes {
 		totalIncome += i.Amount.Value
-
 		householdIncome[i.Source] += i.Amount.Value
-
 		if personIncome[i.PersonName] == nil {
 			personIncome[i.PersonName] = map[string]float64{}
 		}
 		personIncome[i.PersonName][i.Source] += i.Amount.Value
 	}
 
-	// HOUSEHOLD VIEW
 	household := presentation.HouseholdView{
 		Totals: presentation.Totals{
 			Income:  domain.Money{Value: totalIncome, Currency: "EUR"},
@@ -172,12 +154,16 @@ func buildReport(h domain.HouseholdData, persons []domain.PersonData) presentati
 		CategoryGroups: h.CategoryGroups,
 	}
 
+	// Sorted by amount descending for consistent report output.
 	for k, v := range householdExpense {
 		household.ExpensesByCategory = append(household.ExpensesByCategory, presentation.CategoryTotal{
 			Category: k,
 			Total:    domain.Money{Value: v, Currency: "EUR"},
 		})
 	}
+	sort.Slice(household.ExpensesByCategory, func(i, j int) bool {
+		return household.ExpensesByCategory[i].Total.Value > household.ExpensesByCategory[j].Total.Value
+	})
 
 	for k, v := range householdIncome {
 		household.IncomeBySource = append(household.IncomeBySource, presentation.SourceTotal{
@@ -185,31 +171,44 @@ func buildReport(h domain.HouseholdData, persons []domain.PersonData) presentati
 			Total:  domain.Money{Value: v, Currency: "EUR"},
 		})
 	}
+	sort.Slice(household.IncomeBySource, func(i, j int) bool {
+		return household.IncomeBySource[i].Total.Value > household.IncomeBySource[j].Total.Value
+	})
 
-	// Build a name → PersonData lookup for category groups and raw transactions.
+	// Build name → PersonData lookup for groups and raw transactions.
 	personGroups := make(map[string][]domain.CategoryGroup, len(persons))
-	personExpenses := make(map[string][]domain.Expense)
-	personIncomes := make(map[string][]domain.Income)
+	personExpenses := make(map[string][]domain.Expense, len(persons))
+	personIncomes := make(map[string][]domain.Income, len(persons))
 	for _, pd := range persons {
 		personGroups[pd.Person.Name] = pd.CategoryGroups
 		personExpenses[pd.Person.Name] = pd.Expenses
 		personIncomes[pd.Person.Name] = pd.Incomes
 	}
 
-	// PERSON VIEWS
-	seen := map[string]bool{}
-	var people []presentation.PersonView
-
+	// Collect all person names and sort for deterministic output.
+	allNames := make(map[string]bool)
 	for name := range personExpense {
-		seen[name] = true
-		pv := buildPersonView(name, personExpense[name], personIncome[name], personGroups[name], personExpenses[name], personIncomes[name])
-		people = append(people, pv)
+		allNames[name] = true
 	}
 	for name := range personIncome {
-		if seen[name] {
-			continue
-		}
-		pv := buildPersonView(name, nil, personIncome[name], personGroups[name], personExpenses[name], personIncomes[name])
+		allNames[name] = true
+	}
+	sortedNames := make([]string, 0, len(allNames))
+	for name := range allNames {
+		sortedNames = append(sortedNames, name)
+	}
+	sort.Strings(sortedNames)
+
+	var people []presentation.PersonView
+	for _, name := range sortedNames {
+		pv := buildPersonView(
+			name,
+			personExpense[name],
+			personIncome[name],
+			personGroups[name],
+			personExpenses[name],
+			personIncomes[name],
+		)
 		people = append(people, pv)
 	}
 
@@ -254,6 +253,9 @@ func buildPersonView(
 			Total:    domain.Money{Value: v, Currency: "EUR"},
 		})
 	}
+	sort.Slice(pv.ExpensesByCategory, func(i, j int) bool {
+		return pv.ExpensesByCategory[i].Total.Value > pv.ExpensesByCategory[j].Total.Value
+	})
 
 	for k, v := range incomes {
 		pv.IncomeBySource = append(pv.IncomeBySource, presentation.SourceTotal{
@@ -261,25 +263,33 @@ func buildPersonView(
 			Total:  domain.Money{Value: v, Currency: "EUR"},
 		})
 	}
+	sort.Slice(pv.IncomeBySource, func(i, j int) bool {
+		return pv.IncomeBySource[i].Total.Value > pv.IncomeBySource[j].Total.Value
+	})
+
+	// Sort raw transactions by date descending for consistent JSON output.
+	sort.Slice(pv.Expenses, func(i, j int) bool {
+		return pv.Expenses[i].Date.After(pv.Expenses[j].Date)
+	})
+	sort.Slice(pv.Incomes, func(i, j int) bool {
+		return pv.Incomes[i].Date.After(pv.Incomes[j].Date)
+	})
 
 	return pv
 }
 
-// writeOutputs handles final artifact writing.
 func (p *Pipeline) writeOutputs(month string, outputs []presentation.Output) error {
-	outputDir := filepath.Join("output", month)
+	outputDir := filepath.Join(p.cfg.OutputDir, month)
 
-	if err := os.MkdirAll(outputDir, 0755); err != nil {
+	if err := os.MkdirAll(outputDir, 0o755); err != nil {
 		return err
 	}
 
 	for _, o := range outputs {
 		path := filepath.Join(outputDir, o.File.Name)
-
-		if err := os.WriteFile(path, o.File.Content, 0644); err != nil {
+		if err := os.WriteFile(path, o.File.Content, 0o644); err != nil {
 			return fmt.Errorf("writing %s: %w", path, err)
 		}
-
 		p.log.Info("file written", "file", path, "bytes", len(o.File.Content))
 	}
 

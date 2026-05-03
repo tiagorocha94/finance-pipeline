@@ -33,6 +33,7 @@ Copy `config.example.json` to `config.json` and fill in your own values. The fil
 ```json
 {
   "data_dir": "./data",
+  "output_dir": "output",
   "people": ["Alice", "Bob"],
   "category_groups": [
     {
@@ -62,6 +63,7 @@ Copy `config.example.json` to `config.json` and fill in your own values. The fil
 | Field | Description |
 |---|---|
 | `data_dir` | Root directory where input files are read from |
+| `output_dir` | Directory where `data.json` and `manifest.json` are written. Defaults to `output` |
 | `people` | List of person names; input filenames must match these (without extension) |
 | `category_groups` | Budget groups with a target % of total income and the expense categories that belong to each. Use `"*"` in a group's categories to catch any expense not matched by another group. Omit the field entirely to skip budget group calculations |
 
@@ -78,10 +80,17 @@ Each filename (e.g. `Alice.xlsx`, `Bob.csv`) must match a name in the `people` c
 
 ```bash
 # Current month (default)
-go run ./cmd/cli/main.go
+make run
 
 # Specific month
 go run ./cmd/cli/main.go -month 2026-01
+```
+
+## Running tests
+
+```bash
+make test     # run all tests
+make vet      # run go vet
 ```
 
 ## Viewing the dashboard
@@ -104,3 +113,4 @@ go run ./cmd/server/main.go -dir ./other/path   # custom output directory
 ## Requirements
 
 - Go 1.22+
+- Internet access for the dashboard's Google Fonts (optional, degrades gracefully)
