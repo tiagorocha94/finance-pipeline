@@ -2,20 +2,25 @@ version: "2"
 
 linters:
   enable:
-    - errcheck       # unchecked errors
-    - govet          # suspicious constructs
-    - staticcheck    # broad static analysis
-    - unused         # unused code
-    - gosimple       # simplification suggestions
-    - ineffassign    # assignments whose value is never used
-    - typecheck      # ensures code compiles
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
 
 linters-settings:
   errcheck:
-    # Don't require checking errors on fmt.Print* or log.* calls.
-    ignore: "fmt:.*,log:.*"
-
+    exclude-functions:
+      - fmt.Print
+      - fmt.Printf
+      - fmt.Println
+      - log.Print
+      - log.Printf
+      - log.Println
+      - log.Fatal
+      - log.Fatalf
+      - log.Fatalln
+      
 issues:
-  # Show all issues, not just the first 50.
   max-issues-per-linter: 0
   max-same-issues: 0

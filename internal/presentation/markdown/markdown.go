@@ -20,7 +20,7 @@ func New() *Exporter {
 func (e *Exporter) Export(r presentation.Report) ([]presentation.Output, error) {
 	var buf bytes.Buffer
 	w := func(s string) { buf.WriteString(s) }
-	wf := func(format string, args ...any) { buf.WriteString(fmt.Sprintf(format, args...)) }
+	wf := func(format string, args ...any) { fmt.Fprintf(&buf, format, args...) }
 	nl := func() { buf.WriteByte('\n') }
 
 	income := r.Household.Totals.Income.Value

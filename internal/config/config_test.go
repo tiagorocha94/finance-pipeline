@@ -17,7 +17,7 @@ func writeConfig(t *testing.T, content string) string {
 	if _, err := f.WriteString(content); err != nil {
 		t.Fatalf("write temp file: %v", err)
 	}
-	f.Close()
+	f.Close() //nolint: errcheck
 	return f.Name()
 }
 

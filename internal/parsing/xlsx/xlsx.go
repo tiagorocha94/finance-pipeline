@@ -40,7 +40,7 @@ func (p *Parser) Parse(file domain.RawFile) (domain.PersonData, error) {
 	if err != nil {
 		return domain.PersonData{}, fmt.Errorf("open workbook: %w", err)
 	}
-	defer f.Close()
+	defer f.Close() //nolint: errcheck
 
 	expenses, err := parseExpenses(f, personName)
 	if err != nil {
@@ -179,6 +179,7 @@ var dateLayouts = []string{
 	"01/02/2006",
 	"2/1/2006", // day/month/year variant
 	"02/01/2006",
+	"01-02-06",
 }
 
 func parseDate(s string) (time.Time, error) {
