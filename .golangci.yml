@@ -8,18 +8,18 @@ linters:
     - staticcheck
     - unused
 
-linters-settings:
-  errcheck:
-    exclude-functions:
-      - fmt.Print
-      - fmt.Printf
-      - fmt.Println
-      - log.Print
-      - log.Printf
-      - log.Println
-      - log.Fatal
-      - log.Fatalf
-      - log.Fatalln
+  settings:
+    errcheck:
+      exclude-functions:
+        - fmt.Print
+        - fmt.Printf
+        - fmt.Println
+        - log.Print
+        - log.Printf
+        - log.Println
+        - log.Fatal
+        - log.Fatalf
+        - log.Fatalln
       
 issues:
   max-issues-per-linter: 0
