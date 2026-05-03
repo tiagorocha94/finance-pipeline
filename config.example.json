@@ -1,0 +1,26 @@
+{
+  "data_dir": "./data",
+  "people": ["Alice", "Bob"],
+  "category_groups": [
+    {
+      "name": "Essentials",
+      "percent": "50%",
+      "categories": ["Rent", "Groceries", "Transport", "Health"]
+    },
+    {
+      "name": "Investments",
+      "percent": "20%",
+      "categories": ["Stocks", "Crypto"]
+    },
+    {
+      "name": "Savings",
+      "percent": "10%",
+      "categories": ["Savings", "Emergency fund"]
+    },
+    {
+      "name": "Others",
+      "percent": "10%",
+      "categories": ["*"]
+    }
+  ]
+}
