@@ -4,9 +4,9 @@ Items are tagged by type and scored on **value** (impact on correctness, usabili
 
 | # | Name | Type | Description | Value | Complexity |
 |---|------|------|-------------|-------|------------|
-| 1 | Deterministic report order | Bug | `buildReport` iterates Go maps, so person and category order changes between runs. Sort all slices (people by name, categories by amount) before returning the report. | High | Low |
+| 1 | ~~Deterministic report order~~ | Bug | ✅ Done. All slices sorted: people alphabetically, categories/sources by amount desc, transactions by date desc. | High | Low |
 | 2 | `OutputDir` in config | Architecture | `"output"` is hardcoded in two places (`pipeline.go` and `manifest.Update` call). Add `output_dir` to `Config` and thread it through. | High | Low |
-| 3 | Move `buildReport` out of pipeline | Architecture | `buildReport` / `buildPersonView` are presentation concerns living in `pipeline.go`. Move them to `internal/presentation/build.go`. | Medium | Low |
+| 3 | ~~Move `buildReport` out of pipeline~~ | Architecture | ✅ Done. Moved to `internal/presentation/build.go` as exported `BuildReport()`. | Medium | Low |
 | 4 | Fix `xlsx` bytes→reader | Bug | `excelize.OpenReader(strings.NewReader(string(file.Content)))` does an unnecessary `[]byte → string → Reader` round-trip. Use `bytes.NewReader(file.Content)` directly. | Low | Low |
 | 5 | Remove unused `minCols` constant | Cleanup | `minCols` in `xlsx.go` is defined but never referenced. | Low | Low |
 | 6 | Config validation | Enhancement | Validate config on load: non-empty `people`, valid `data_dir`, percents that sum ≤ 100 (warn, not error), no duplicate group names. Return clear errors before the pipeline starts. | High | Low |
