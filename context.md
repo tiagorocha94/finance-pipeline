@@ -4,6 +4,13 @@ Quick reference for working in this codebase. Read this before making changes.
 
 ---
 
+## Working on ideas.md items
+
+When asked to implement an `ideas.md` item, follow the workflow defined in `AGENTS.md`:
+implement → add/update tests → update `ideas.md` → update `context.md` → output all changed files → commit message.
+
+---
+
 ## What it does
 
 A Go CLI pipeline that reads personal finance exports (CSV or XLSX), aggregates them into a household view, and writes `data.json` per month. A standalone SPA (`output/index.html`) reads those files and renders an interactive dashboard served by a built-in Go file server.
@@ -197,7 +204,7 @@ make vet                              # go vet
 | `internal/parsing/csv` | `csv_test.go` | Happy path, person name, all error cases |
 | `internal/aggregation/household` | `household_test.go` | Aggregate, computeGroups, catch-all, per-person, mutation guard |
 
-No tests yet for: xlsx parser, pipeline/buildReport, markdown exporter, manifest, router. See `ideas.md` items 8, 10, 11.
+No tests yet for: XLSX parser, `BuildReport`/`buildPersonView`, markdown exporter, manifest, router. See `ideas.md` items 1, 2, 3.
 
 ---
 
