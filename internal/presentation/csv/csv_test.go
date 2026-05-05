@@ -49,6 +49,44 @@ func parseCSV(t *testing.T, content []byte) [][]string {
 	return records
 }
 
+func findOutput(outputs []presentation.Output, name string) *presentation.Output {
+	for i := range outputs {
+		if outputs[i].File.Name == name {
+			return &outputs[i]
+		}
+	}
+	return nil
+}
+
+// ── Output count and filenames ────────────────────────────
+
+func TestExport_OneFilePerPerson(t *testing.T) {
+	e := csvexp.New()
+	outputs, err := e.Export(makeReport())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(outputs) != 2 {
+		t.Fatalf("want 2 outputs (one per person), got %d", len(outputs))
+	}
+}
+
+func TestExport_Filenames(t *testing.T) {
+	e := csvexp.New()
+	outputs, err := e.Export(makeReport())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if findOutput(outputs, "alice.csv") == nil {
+		t.Error("want alice.csv in outputs")
+	}
+	if findOutput(outputs, "bob.csv") == nil {
+		t.Error("want bob.csv in outputs")
+	}
+}
+
+// ── Headers ───────────────────────────────────────────────
+
 func TestExport_Header(t *testing.T) {
 	e := csvexp.New()
 	outputs, err := e.Export(makeReport())
@@ -56,31 +94,59 @@ func TestExport_Header(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	records := parseCSV(t, outputs[0].File.Content)
 	want := []string{"Date", "Person", "Type", "Amount", "Currency", "Category", "Description"}
-	if len(records) == 0 {
-		t.Fatal("no records in output")
-	}
-	for i, col := range want {
-		if records[0][i] != col {
-			t.Errorf("header[%d]: want %q, got %q", i, col, records[0][i])
+	for _, o := range outputs {
+		records := parseCSV(t, o.File.Content)
+		if len(records) == 0 {
+			t.Fatalf("%s: no records", o.File.Name)
+		}
+		for i, col := range want {
+			if records[0][i] != col {
+				t.Errorf("%s header[%d]: want %q, got %q", o.File.Name, i, col, records[0][i])
+			}
 		}
 	}
 }
 
-func TestExport_RowCount(t *testing.T) {
+// ── Row counts per person ─────────────────────────────────
+
+func TestExport_AliceRowCount(t *testing.T) {
 	e := csvexp.New()
 	outputs, err := e.Export(makeReport())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	records := parseCSV(t, outputs[0].File.Content)
-	// 1 header + 2 Alice expenses + 1 Alice income + 1 Bob expense = 5
-	if len(records) != 5 {
-		t.Errorf("want 5 rows (header + 4 data), got %d", len(records))
+	o := findOutput(outputs, "alice.csv")
+	if o == nil {
+		t.Fatal("alice.csv not found")
+	}
+	records := parseCSV(t, o.File.Content)
+	// 1 header + 2 expenses + 1 income = 4
+	if len(records) != 4 {
+		t.Errorf("alice.csv: want 4 rows, got %d", len(records))
 	}
 }
+
+func TestExport_BobRowCount(t *testing.T) {
+	e := csvexp.New()
+	outputs, err := e.Export(makeReport())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	o := findOutput(outputs, "bob.csv")
+	if o == nil {
+		t.Fatal("bob.csv not found")
+	}
+	records := parseCSV(t, o.File.Content)
+	// 1 header + 1 expense = 2
+	if len(records) != 2 {
+		t.Errorf("bob.csv: want 2 rows, got %d", len(records))
+	}
+}
+
+// ── Row content ───────────────────────────────────────────
 
 func TestExport_ExpenseRow(t *testing.T) {
 	e := csvexp.New()
@@ -89,9 +155,12 @@ func TestExport_ExpenseRow(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	records := parseCSV(t, outputs[0].File.Content)
-	// First data row: Alice's first expense
-	row := records[1]
+	o := findOutput(outputs, "alice.csv")
+	if o == nil {
+		t.Fatal("alice.csv not found")
+	}
+	records := parseCSV(t, o.File.Content)
+	row := records[1] // first data row
 	checks := map[int]string{
 		0: "2026-04-01",
 		1: "Alice",
@@ -115,9 +184,12 @@ func TestExport_IncomeRow(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	records := parseCSV(t, outputs[0].File.Content)
-	// Third data row (index 3): Alice's income
-	row := records[3]
+	o := findOutput(outputs, "alice.csv")
+	if o == nil {
+		t.Fatal("alice.csv not found")
+	}
+	records := parseCSV(t, o.File.Content)
+	row := records[3] // after 2 expenses
 	checks := map[int]string{
 		0: "2026-04-01",
 		1: "Alice",
@@ -134,6 +206,28 @@ func TestExport_IncomeRow(t *testing.T) {
 	}
 }
 
+func TestExport_IsolationBetweenPeople(t *testing.T) {
+	// Bob's file must not contain Alice's rows.
+	e := csvexp.New()
+	outputs, err := e.Export(makeReport())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	o := findOutput(outputs, "bob.csv")
+	if o == nil {
+		t.Fatal("bob.csv not found")
+	}
+	records := parseCSV(t, o.File.Content)
+	for _, row := range records[1:] {
+		if row[1] != "Bob" {
+			t.Errorf("bob.csv contains row for %q, want Bob only", row[1])
+		}
+	}
+}
+
+// ── Edge cases ────────────────────────────────────────────
+
 func TestExport_EmptyNote(t *testing.T) {
 	e := csvexp.New()
 	outputs, err := e.Export(makeReport())
@@ -141,24 +235,14 @@ func TestExport_EmptyNote(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	records := parseCSV(t, outputs[0].File.Content)
-	// Second data row (index 2): Alice's transport expense with empty note
+	o := findOutput(outputs, "alice.csv")
+	if o == nil {
+		t.Fatal("alice.csv not found")
+	}
+	records := parseCSV(t, o.File.Content)
+	// Row 2 (index 2): Alice's transport expense — no note
 	if records[2][6] != "" {
 		t.Errorf("empty note: want empty string, got %q", records[2][6])
-	}
-}
-
-func TestExport_OutputFilename(t *testing.T) {
-	e := csvexp.New()
-	outputs, err := e.Export(makeReport())
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(outputs) != 1 {
-		t.Fatalf("want 1 output, got %d", len(outputs))
-	}
-	if outputs[0].File.Name != "transactions.csv" {
-		t.Errorf("filename: want transactions.csv, got %q", outputs[0].File.Name)
 	}
 }
 
@@ -168,15 +252,12 @@ func TestExport_EmptyReport(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	records := parseCSV(t, outputs[0].File.Content)
-	// Only the header row
-	if len(records) != 1 {
-		t.Errorf("empty report: want 1 row (header only), got %d", len(records))
+	if len(outputs) != 0 {
+		t.Errorf("empty report: want 0 outputs, got %d", len(outputs))
 	}
 }
 
-func TestExport_ValidCSV(t *testing.T) {
-	// Ensure values with commas are properly quoted by encoding/csv.
+func TestExport_CommaInNote(t *testing.T) {
 	e := csvexp.New()
 	r := presentation.Report{
 		People: []presentation.PersonView{
