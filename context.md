@@ -207,7 +207,7 @@ make vet                              # go vet
 | `internal/parsing/csv` | `csv_test.go` | Happy path, person name, all error cases |
 | `internal/aggregation/household` | `household_test.go` | Aggregate, computeGroups, catch-all, per-person, mutation guard |
 
-No tests yet for: XLSX parser, `BuildReport`/`buildPersonView`, markdown exporter, manifest, router. See `ideas.md` items 1, 2, 3.
+No tests yet for: XLSX parser, markdown exporter, manifest, router. End-to-end pipeline test pending. See `ideas.md` items 1, 2.
 
 ---
 
@@ -225,7 +225,6 @@ Suppression pattern in code: `//nolint: errcheck` used on `f.Close()` in xlsx pa
 
 ## Known design decisions & gotchas
 
-- **`BuildReport` lives in `internal/presentation/build.go`** — moved from `pipeline.go`; called as `presentation.BuildReport(household, peopleData)` in `pipeline.Run()`
 - **Currency hardcoded to `"EUR"`** in `buildReport` — mixed-currency files will silently produce wrong totals (ideas.md #14)
 - **XLSX category normalisation** only title-cases the first character — full case-insensitive matching is not implemented
 - **`manifest.Update`** will error if `output/` doesn't exist on first run — `os.MkdirAll` is called in `writeOutputs` before it, so this is safe as long as at least one exporter runs first
