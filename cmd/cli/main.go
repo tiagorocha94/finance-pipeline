@@ -15,6 +15,7 @@ import (
 	"tiagorocha94/household-finance-pipeline/internal/parsing/xlsx"
 	"tiagorocha94/household-finance-pipeline/internal/pipeline"
 	"tiagorocha94/household-finance-pipeline/internal/presentation"
+	csvexp "tiagorocha94/household-finance-pipeline/internal/presentation/csv"
 	jsonexp "tiagorocha94/household-finance-pipeline/internal/presentation/json"
 	"tiagorocha94/household-finance-pipeline/internal/presentation/markdown"
 )
@@ -51,6 +52,7 @@ func run(logger *slog.Logger) error {
 		[]presentation.Exporter{
 			markdown.New(),
 			jsonexp.New(),
+			csvexp.New(),
 		},
 		logger,
 	)

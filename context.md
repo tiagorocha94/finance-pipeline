@@ -63,6 +63,7 @@ internal/
     output.go           Output struct
     json/json.go        serialises Report → data.json
     markdown/markdown.go renders Report → report.md
+    csv/csv.go          flat transactions.csv — one row per expense/income, no aggregation
 
 output/
   index.html            SPA — tracked in repo, never overwritten by pipeline
@@ -115,6 +116,7 @@ presentation.BuildReport()    ← lives in internal/presentation/build.go
 
 json.Exporter.Export()         → output/<month>/data.json
 markdown.Exporter.Export()     → output/<month>/report.md
+csv.Exporter.Export()          → output/<month>/transactions.csv
 
 manifest.Update(outputDir)     → output/manifest.json  (sorted newest-first)
 ```
@@ -145,6 +147,7 @@ income,2500.00,EUR,Salary,2026-01-01,
 Each pipeline run produces:
 - `output/<YYYY-MM>/data.json` — full `presentation.Report` as JSON
 - `output/<YYYY-MM>/report.md` — markdown summary
+- `output/<YYYY-MM>/transactions.csv` — flat expense+income rows, no aggregation
 - `output/manifest.json` — `{ "months": ["2026-02", "2026-01", ...] }` newest-first
 
 The SPA reads `manifest.json` on boot, then fetches each month's `data.json` on demand. All data is cached in memory after first fetch.
